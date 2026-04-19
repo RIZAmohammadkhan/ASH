@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ash | The Fast, Cross-Platform AI Shell</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #1a1e24; /* Ocean dark background */
+            --bg-term: #2b303b;
+            --fg-main: #c0c5ce;
+            --fg-dim: #65737e;
+            --cyan: #96b5b4;
+            --green: #a3be8c;
+            --yellow: #ebcb8b;
+            --blue: #8fa1b3;
+            --border: #4f5b66;
+            --tui-border: #8fa1b3;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Fira Code', monospace;
+            background-color: var(--bg-base);
+            color: var(--fg-main);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        a { text-decoration: none; color: var(--cyan); }
+        a:hover { text-decoration: underline; }
+
+        /* Container */
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2rem 0;
+            border-bottom: 1px dashed var(--border);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--green);
+        }
+
+        nav a {
+            margin-left: 1.5rem;
+            color: var(--fg-main);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 5rem 0;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1.5rem;
+            color: #ffffff;
+            letter-spacing: -1px;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--fg-dim);
+            max-width: 600px;
+            margin: 0 auto 2.5rem;
+        }
+
+        /* Buttons */
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 4rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.8rem 1.5rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            background: transparent;
+            color: var(--fg-main);
+            min-width: 200px;
+        }
+
+        .btn-primary {
+            background-color: var(--green);
+            color: var(--bg-base);
+            border-color: var(--green);
+        }
+
+        .btn-primary:hover {
+            background-color: #8fa87a;
+            border-color: #8fa87a;
+            text-decoration: none;
+        }
+
+        .btn-secondary {
+            background-color: var(--bg-term);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--fg-main);
+            text-decoration: none;
+        }
+
+        /* Simulated Terminal / TUI Window */
+        .terminal-wrapper {
+            background: var(--bg-term);
+            border-radius: 8px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
+            border: 1px solid var(--border);
+            text-align: left;
+            margin: 0 auto;
+            max-width: 800px;
+        }
+
+        .terminal-header {
+            background: #1f232b;
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .dots {
+            display: flex;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .dot.red { background: #bf616a; }
+        .dot.yellow { background: #ebcb8b; }
+        .dot.green { background: #a3be8c; }
+
+        .terminal-title {
+            flex: 1;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--fg-dim);
+        }
+
+        .terminal-body {
+            padding: 1.5rem;
+            font-size: 0.95rem;
+            min-height: 280px;
+        }
+
+        /* TUI Box Styles */
+        .tui-box {
+            border: 1px solid var(--tui-border);
+            border-radius: 4px;
+            padding: 1rem;
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        .tui-title {
+            position: absolute;
+            top: -12px;
+            left: 1rem;
+            background: var(--bg-term);
+            padding: 0 0.5rem;
+            color: var(--fg-main);
+        }
+
+        .text-cyan { color: var(--cyan); }
+        .text-green { color: var(--green); }
+        .text-yellow { color: var(--yellow); }
+        .text-dim { color: var(--fg-dim); }
+        .text-bold { font-weight: 600; color: #fff; }
+
+        /* Features Section */
+        .features {
+            padding: 4rem 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: var(--bg-term);
+            border: 1px solid var(--border);
+            padding: 2rem;
+            border-radius: 4px;
+        }
+
+        .feature-card h3 {
+            color: var(--cyan);
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .feature-card p {
+            color: var(--fg-dim);
+            font-size: 0.95rem;
+        }
+
+        /* Setup Section */
+        .setup {
+            padding: 4rem 0;
+            border-top: 1px dashed var(--border);
+        }
+
+        .setup h2 {
+            margin-bottom: 1rem;
+            color: #fff;
+        }
+
+        .setup-description {
+            color: var(--fg-dim);
+            margin-bottom: 2rem;
+        }
+
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 3rem;
+        }
+
+        .code-block {
+            background: var(--bg-term);
+            padding: 1rem;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            overflow-x: auto;
+            margin-bottom: 1.5rem;
+            color: var(--fg-main);
+        }
+
+        .mt-4 { margin-top: 2rem; }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            border-top: 1px dashed var(--border);
+            color: var(--fg-dim);
+            margin-top: 2rem;
+            font-size: 0.9rem;
+        }
+
+        /* Blinking Cursor */
+        .cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1.1em;
+            background-color: var(--fg-main);
+            vertical-align: middle;
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.2rem; }
+            .btn-group { flex-direction: column; align-items: center; }
+            .btn { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div class="logo">ash_</div>
+            <nav>
+                <a href="#features">Features</a>
+                <a href="#install">Install</a>
+                <a href="https://github.com/yourusername/ash" target="_blank">GitHub</a>
+            </nav>
+        </header>
+
+        <section class="hero">
+            <h1>Turn natural language into shell commands.</h1>
+            <p>A fast, cross-platform AI shell built in Rust. Keeps context small, retries when commands fail, and stays focused on terminal workflows.</p>
+            
+            <div class="btn-group">
+                <!-- ID attached here for JS to dynamically inject the OS name -->
+                <a href="#install" id="hero-download-btn" class="btn btn-primary">Download ash</a>
+                <a href="https://github.com/rizamohammadkhan/ash" class="btn btn-secondary">View Source Code</a>
+            </div>
+
+            <!-- Terminal UI Demo -->
+            <div class="terminal-wrapper">
+                <div class="terminal-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <div class="terminal-title">ash — /bin/zsh</div>
+                </div>
+                <div class="terminal-body">
+                    <div class="tui-box" id="history-box" style="display: none;">
+                        <span class="tui-title"> ash history </span>
+                        <div><span class="text-bold">Intent: </span><span id="demo-intent"></span></div>
+                        <div class="text-cyan">Command [exit 0]:</div>
+                        <div id="demo-command"></div>
+                        <div class="text-green">Result:</div>
+                        <div id="demo-result" class="text-dim"></div>
+                    </div>
+                    
+                    <div class="tui-box">
+                        <span class="tui-title" id="status-title"> ready  openrouter/auto  shell:/bin/zsh </span>
+                        <div class="text-yellow" id="clarification-text">Enter a request in plain English.</div>
+                        <div>> <span id="typewriter"></span><span class="cursor" id="cursor"></span></div>
+                        <br>
+                        <div class="text-dim" style="font-size: 0.8rem;">Enter submit  Alt+M/F2 models  Ctrl+R refresh  Ctrl+O open output/link  Ctrl+C quit</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" class="features">
+            <div class="feature-card">
+                <h3>Ratatui Powered TUI</h3>
+                <p>Scrollable history, searchable model pickers, and inline spinners all wrapped in a lightning-fast Rust terminal interface.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Smart Retry Loop</h3>
+                <p>If a command fails (like missing permissions or packages), ash feeds the stderr back to the model to fix it automatically—up to 3 times.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Dynamic OpenRouter Models</h3>
+                <p>Fetches up-to-date models directly from OpenRouter API. Supports free-tier only mode, or plug in your key for full access.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Minimal Context Injection</h3>
+                <p>Automatically shares your OS, shell, PATH tool hints, and working directory to ensure accurate commands without bloated tokens.</p>
+            </div>
+        </section>
+
+        <section id="install" class="setup">
+            <h2>Download & Install</h2>
+            <p class="setup-description">
+                Download the standalone executable for your operating system. No dependencies required.
+            </p>
+            
+            <div class="download-grid">
+                <a href="#windows-placeholder" class="btn btn-secondary os-btn" data-os="Windows">
+                    ↓ Windows (.exe)
+                </a>
+                <a href="#macos-placeholder" class="btn btn-secondary os-btn" data-os="macOS">
+                    ↓ macOS (.tar)
+                </a>
+                <a href="#linux-placeholder" class="btn btn-secondary os-btn" data-os="Linux">
+                    ↓ Linux (.tar)
+                </a>
+            </div>
+
+            <div class="mt-4">
+                <p><strong>1. Configure your API Key</strong></p>
+                <p style="color: var(--fg-dim); margin-bottom: 0.5rem;">Ash creates a configuration file automatically on first run. Add your OpenRouter API key to unlock all models.</p>
+                <div class="code-block">
+                    <span class="text-dim"># ~/.config/ash/config.toml</span><br>
+                    openrouter_api_key = "sk-or-v1-..."<br>
+                    default_model = "openrouter/auto"<br>
+                    shell = "/bin/zsh"
+                </div>
+
+                <p><strong>2. Run Initial Query</strong></p>
+                <p style="color: var(--fg-dim); margin-bottom: 0.5rem;">Open your terminal and start using ash immediately.</p>
+                <div class="code-block">
+                    ash "find the 20 largest files here"
+                </div>
+
+                <p class="mt-4"><strong>Advanced: Compile from Source</strong></p>
+                <div class="code-block">
+                    git clone https://github.com/yourusername/ash.git<br>
+                    cd ash<br>
+                    cargo install --path .
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>ash — The cross-platform AI shell. Built with Rust, Ratatui, and Crossterm.</p>
+        </footer>
+    </div>
+
+    <!-- Scripts (Animation & OS Detection) -->
+    <script>
+        // --- 1. OS Detection Logic ---
+        function detectOS() {
+            const platform = window.navigator?.platform?.toLowerCase() || '';
+            const userAgent = window.navigator?.userAgent?.toLowerCase() || '';
+
+            if (platform.includes('win') || userAgent.includes('windows')) return 'Windows';
+            if (platform.includes('mac') || userAgent.includes('mac os')) return 'macOS';
+            if (platform.includes('linux') || userAgent.includes('linux')) return 'Linux';
+            return 'Unknown';
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const os = detectOS();
+            const primaryBtn = document.getElementById("hero-download-btn");
+            
+            // Map the placeholder links
+            const downloadLinks = {
+                'Windows': '#windows-placeholder',
+                'macOS': '#macos-placeholder',
+                'Linux': '#linux-placeholder',
+                'Unknown': '#install'
+            };
+
+            if (os !== 'Unknown') {
+                // Update Hero Button
+                primaryBtn.innerHTML = `Download for ${os}`;
+                primaryBtn.href = downloadLinks[os];
+                
+                // Highlight the correct fallback button in the grid
+                const specificBtn = document.querySelector(`.os-btn[data-os="${os}"]`);
+                if (specificBtn) {
+                    specificBtn.classList.add('btn-primary');
+                    specificBtn.classList.remove('btn-secondary');
+                }
+            }
+        });
+
+
+        // --- 2. Interactive Terminal Animation Logic ---
+        const typewriterEl = document.getElementById('typewriter');
+        const historyBox = document.getElementById('history-box');
+        const intentEl = document.getElementById('demo-intent');
+        const commandEl = document.getElementById('demo-command');
+        const resultEl = document.getElementById('demo-result');
+        const statusTitle = document.getElementById('status-title');
+        
+        const textToType = "find the 20 largest files in this directory";
+        let typeIndex = 0;
+
+        function typeWriter() {
+            if (typeIndex < textToType.length) {
+                typewriterEl.innerHTML += textToType.charAt(typeIndex);
+                typeIndex++;
+                setTimeout(typeWriter, 50 + Math.random() * 50);
+            } else {
+                setTimeout(startProcessing, 600);
+            }
+        }
+
+        function startProcessing() {
+            statusTitle.innerHTML = " /  openrouter/auto  shell:/bin/zsh ";
+            
+            let spinnerFrames = ['|', '/', '-', '\\'];
+            let spinIndex = 0;
+            
+            const spinInterval = setInterval(() => {
+                spinIndex++;
+                statusTitle.innerHTML = ` ${spinnerFrames[spinIndex % 4]}  openrouter/auto  shell:/bin/zsh `;
+            }, 120);
+
+            setTimeout(() => {
+                clearInterval(spinInterval);
+                showResult();
+            }, 2500);
+        }
+
+        function showResult() {
+            statusTitle.innerHTML = " ready  openrouter/auto  shell:/bin/zsh ";
+            typewriterEl.innerHTML = "";
+            historyBox.style.display = "block";
+            
+            intentEl.textContent = textToType;
+            commandEl.innerHTML = "find . -type f -exec du -h {} + | sort -rh | head -n 20";
+            resultEl.innerHTML = "1.2G    ./target/release/deps<br>450M    ./src/models_cache.json<br>...[full output saved to /tmp/ash-out-12345.txt]";
+            
+            setTimeout(resetAnimation, 6000);
+        }
+
+        function resetAnimation() {
+            historyBox.style.display = "none";
+            typewriterEl.innerHTML = "";
+            typeIndex = 0;
+            setTimeout(typeWriter, 1000);
+        }
+
+        setTimeout(typeWriter, 1500);
+    </script>
+</body>
+</html>
