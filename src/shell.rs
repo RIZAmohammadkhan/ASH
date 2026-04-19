@@ -1,15 +1,7 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use tokio::{fs, process::Command};
-
-use crate::model::now_unix_seconds;
-
-const INLINE_OUTPUT_LINES: usize = 10;
-const TAIL_OUTPUT_LINES: usize = 6;
+use tokio::process::Command;
 
 #[derive(Debug, Clone)]
 pub struct ShellRunResult {
@@ -20,6 +12,7 @@ pub struct ShellRunResult {
     pub display_output: String,
     pub saved_output_path: Option<PathBuf>,
     pub open_target: Option<String>,
+    pub new_cwd: PathBuf,
 }
 
 pub async fn run_command(
@@ -35,7 +28,29 @@ pub async fn run_command(
         .await
         .with_context(|| format!("failed to execute {command_text}"))?;
 
-    let stdout = normalize_output(&String::from_utf8_lossy(&output.stdout));
+    let stdout_raw = String::from_utf8_lossy(&output.stdout);
+    
+    let mut parsed_stdout = String::new();
+    let mut new_cwd = cwd.to_path_buf();
+    let mut in_cwd = false;
+    
+    for line in stdout_raw.lines() {
+        if line.trim() == "ASH_CWD_START" {
+            in_cwd = true;
+            continue;
+        }
+        if in_cwd {
+            let path = PathBuf::from(line.trim());
+            if path.exists() {
+                new_cwd = path;
+            }
+        } else {
+            parsed_stdout.push_str(line);
+            parsed_stdout.push('\n');
+        }
+    }
+
+    let stdout = normalize_output(&parsed_stdout);
     let stderr = normalize_output(&String::from_utf8_lossy(&output.stderr));
     let exit_code = output
         .status
@@ -56,6 +71,7 @@ pub async fn run_command(
         display_output,
         saved_output_path,
         open_target,
+        new_cwd,
     })
 }
 
@@ -110,13 +126,13 @@ fn shell_invocation(shell_program: &str, command_text: &str) -> (String, Vec<Str
         .to_ascii_lowercase();
 
     let args = match shell_name.as_str() {
-        "cmd" | "cmd.exe" => vec!["/C".to_string(), command_text.to_string()],
+        "cmd" | "cmd.exe" => vec!["/C".to_string(), format!("{} & echo ASH_CWD_START & cd", command_text)],
         "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe" => vec![
             "-NoLogo".to_string(),
             "-Command".to_string(),
-            command_text.to_string(),
+            format!("{}\nWrite-Output \"ASH_CWD_START\"\n(Get-Location).Path", command_text),
         ],
-        _ => vec!["-lc".to_string(), command_text.to_string()],
+        _ => vec!["-lc".to_string(), format!("{}\necho \"ASH_CWD_START\"\npwd", command_text)],
     };
 
     (shell_program.to_string(), args)
@@ -136,34 +152,7 @@ fn combine_streams(stdout: &str, stderr: &str) -> String {
 }
 
 async fn prepare_display_output(output: &str) -> Result<(String, Option<PathBuf>)> {
-    let line_count = output.lines().count();
-    if line_count <= INLINE_OUTPUT_LINES {
-        return Ok((output.to_string(), None));
-    }
-
-    let path = temp_output_path();
-    fs::write(&path, output)
-        .await
-        .with_context(|| format!("failed to write long output to {}", path.display()))?;
-
-    let tail = output
-        .lines()
-        .rev()
-        .take(TAIL_OUTPUT_LINES)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    Ok((
-        format!("{tail}\n\n[full output saved to {}]", path.display()),
-        Some(path),
-    ))
-}
-
-fn temp_output_path() -> PathBuf {
-    env::temp_dir().join(format!("ash-out-{}.txt", now_unix_seconds()))
+    Ok((output.to_string(), None))
 }
 
 fn likely_expected_output(command: &str) -> bool {
@@ -207,6 +196,7 @@ mod tests {
             display_output: stdout.to_string(),
             saved_output_path: None,
             open_target: None,
+            new_cwd: PathBuf::new(),
         }
     }
 

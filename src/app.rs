@@ -96,11 +96,13 @@ enum QueryOutcome {
     Completed {
         entries: Vec<HistoryEntry>,
         status: String,
+        new_cwd: PathBuf,
     },
     NeedsClarification {
         entries: Vec<HistoryEntry>,
         pending: PendingClarification,
         status: String,
+        new_cwd: PathBuf,
     },
 }
 
@@ -460,7 +462,7 @@ pub async fn run(config: Config, launch: LaunchOptions) -> Result<()> {
 async fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     app: &mut App,
-    runtime: RuntimeContext,
+    mut runtime: RuntimeContext,
     initial_query: Option<String>,
 ) -> Result<()> {
     let (tx, mut rx) = mpsc::unbounded_channel();
@@ -475,7 +477,7 @@ async fn run_loop(
     }
 
     loop {
-        terminal.draw(|frame| render(frame, app))?;
+        terminal.draw(|frame| render(frame, app, &runtime))?;
 
         let Some(event) = rx.recv().await else {
             break;
@@ -495,19 +497,22 @@ async fn run_loop(
             AppEvent::QueryFinished(result) => {
                 app.busy = false;
                 match result {
-                    Ok(QueryOutcome::Completed { entries, status }) => {
+                    Ok(QueryOutcome::Completed { entries, status, new_cwd }) => {
                         app.pending_clarification = None;
                         app.push_entries(entries);
                         app.status = status;
+                        runtime.cwd = new_cwd;
                     }
                     Ok(QueryOutcome::NeedsClarification {
                         entries,
                         pending,
                         status,
+                        new_cwd,
                     }) => {
                         app.push_entries(entries);
                         app.status = status;
                         app.pending_clarification = Some(pending);
+                        runtime.cwd = new_cwd;
                     }
                     Err(error) => {
                         app.status = format!("Request failed: {error}");
@@ -784,7 +789,7 @@ async fn process_query(
     client: OpenRouterClient,
     model_id: String,
     shell_program: String,
-    cwd: PathBuf,
+    mut cwd: PathBuf,
     request: QueryRequest,
 ) -> Result<QueryOutcome> {
     let mut last_result: Option<ShellRunResult> = None;
@@ -804,6 +809,7 @@ async fn process_query(
         match client.plan_command(&model_id, &planning).await? {
             ModelDecision::Run { command, reasoning } => {
                 let result = run_command(&shell_program, &command, &cwd).await?;
+                cwd = result.new_cwd.clone();
                 let should_try_again =
                     retry_depth < MAX_RETRY_DEPTH && should_retry(&command, &result);
 
@@ -829,7 +835,7 @@ async fn process_query(
                     format!("Completed with exit code {}", result.exit_code)
                 };
 
-                return Ok(QueryOutcome::Completed { entries, status });
+                return Ok(QueryOutcome::Completed { entries, status, new_cwd: cwd });
             }
             ModelDecision::Ask {
                 question,
@@ -849,6 +855,7 @@ async fn process_query(
                         attempt_summaries,
                     },
                     status: "Need clarification.".to_string(),
+                    new_cwd: cwd,
                 });
             }
         }
@@ -857,14 +864,14 @@ async fn process_query(
     Err(anyhow!("retry loop exited unexpectedly"))
 }
 
-fn render(frame: &mut Frame<'_>, app: &App) {
+fn render(frame: &mut Frame<'_>, app: &App, runtime: &RuntimeContext) {
     let areas = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(12), Constraint::Length(6)])
         .split(frame.area());
 
     render_history(frame, app, areas[0]);
-    render_input(frame, app, areas[1]);
+    render_input(frame, app, runtime, areas[1]);
 
     if app.model_picker.open {
         render_model_picker(frame, app);
@@ -885,7 +892,7 @@ fn render_history(frame: &mut Frame<'_>, app: &App, area: Rect) {
     frame.render_widget(history, area);
 }
 
-fn render_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
+fn render_input(frame: &mut Frame<'_>, app: &App, runtime: &RuntimeContext, area: Rect) {
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -897,14 +904,15 @@ fn render_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .split(area);
 
     let heading = format!(
-        " {} {}  shell:{} ",
+        " {} {}  shell:{}  cwd:{} ",
         if app.busy {
             app.spinner_frame()
         } else {
             "ready"
         },
         app.active_model_label(),
-        app.shell_program
+        app.shell_program,
+        runtime.cwd.display()
     );
 
     frame.render_widget(Block::default().title(heading).borders(Borders::ALL), area);
